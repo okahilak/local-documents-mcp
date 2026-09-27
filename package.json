@@ -1,0 +1,38 @@
+{
+  "name": "local-documents",
+  "version": "2.0.0",
+  "description": "PDF, XLSX and DOCX tools with safe XLSX editing for Claude Desktop (MCPB)",
+  "main": "server/index.js",
+  "scripts": {
+    "test": "node test/make-fixtures.mjs && node --test test/e2e.test.mjs test/negotiation.test.mjs test/pdfjs-paths.test.mjs test/xlsx-edit.test.mjs",
+    "build": "sh scripts/build.sh",
+    "test:bundle": "sh scripts/test-bundle.sh"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "type": "module",
+  "dependencies": {
+    "@hyzyla/pdfium": "^2.1.13",
+    "@modelcontextprotocol/server": "2.1.0",
+    "@napi-rs/canvas": "1.0.9",
+    "exceljs": "^4.4.0",
+    "jpeg-js": "^0.4.4",
+    "jszip": "3.10.2",
+    "officeparser": "8.0.0",
+    "pdfjs-dist": "6.2.108",
+    "pngjs": "^7.0.0",
+    "saxes": "5.0.1",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@anthropic-ai/mcpb": "^2.1.2",
+    "@modelcontextprotocol/client": "^2.1.0",
+    "@modelcontextprotocol/sdk": "^1.30.1",
+    "docx": "^9.7.2",
+    "pdf-lib": "^1.17.1"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  }
+}
