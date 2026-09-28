@@ -5,7 +5,7 @@
   "display_name": "Local Documents",
   "version": "2.1.0",
   "description": "Fast access to local PDF, XLSX and DOCX files: extract text, render pages, read and search documents and spreadsheets, surgically edit Excel workbooks, and organise files and folders.",
-  "long_description": "Local Documents gives Claude access to PDF, Excel (.xlsx/.xlsm) and Word (.docx) files inside folders you choose.\n\n- **PDF**: page count and metadata, text extraction from the existing text layer, and page rendering to images for scanned or visual pages.\n- **XLSX**: sheet overview, reading cell ranges (with optional formulas), and searching across sheets.\n- **XLSX editing** (`xlsx_edit`): one transactional batch of cell values, formulas, clears and new sheets for .xlsx and .xlsm. Workbooks are edited surgically as OOXML packages: only the affected XML elements change and every unrelated part — charts, pivot tables, macros, add-ins, customXml, SharePoint metadata, custom styles and properties — is copied byte-for-byte. Edits are saved to a **new workbook** by default; the original is only replaced when explicitly requested with overwrite=true.\n- **DOCX**: document properties and outline, text as Markdown with headings, lists, tables, footnotes and comments in reading order, table extraction, and search.\n- **Organising files** (`create_folder`, `rename`, `move`, `move_batch`): create folders and move or rename files and folders of any type. `move_batch` does many moves in one all-or-nothing call: if any move fails, the earlier ones are undone. Nothing is ever overwritten or deleted.\n\nEverything runs inside the extension using pure JavaScript and WebAssembly (pdf.js, PDFium, ExcelJS, officeparser). No Python, Microsoft Office, LibreOffice or other external programs are needed, and the same package works on macOS and Windows. File contents are never modified except by the spreadsheet editing tools; files and folders are only moved or created by the organising tools, and never outside the allowed folders. Paths outside the allowed folders — including via `..` or symbolic links — are rejected, for both reading and writing.",
+  "long_description": "Local Documents gives Claude access to PDF, Excel (.xlsx/.xlsm) and Word (.docx) files inside folders you choose.\n\n- **PDF**: page count and metadata, text extraction from the existing text layer, and page rendering to images for scanned or visual pages.\n- **XLSX**: sheet overview, reading cell ranges (with optional formulas), and searching across sheets.\n- **XLSX editing** (`xlsx_edit`): one transactional batch of cell values, formulas, clears and new sheets for .xlsx and .xlsm. Workbooks are edited surgically as OOXML packages: only the affected XML elements change and every unrelated part — charts, pivot tables, macros, add-ins, customXml, SharePoint metadata, custom styles and properties — is copied byte-for-byte. Edits are saved to a **new workbook** by default; the original is only replaced when explicitly requested with overwrite=true.\n- **DOCX**: document properties and outline, text as Markdown with headings, lists, tables, footnotes and comments in reading order, table extraction, and search.\n- **Organising files** (`list_directory`, `create_folder`, `rename`, `move`, `move_batch`): list folders (optionally recursively) to see what is there, create folders, and move or rename files and folders of any type. `move_batch` does many moves in one all-or-nothing call: if any move fails, the earlier ones are undone. Nothing is ever overwritten or deleted.\n\nEverything runs inside the extension using pure JavaScript and WebAssembly (pdf.js, PDFium, ExcelJS, officeparser). No Python, Microsoft Office, LibreOffice or other external programs are needed, and the same package works on macOS and Windows. File contents are never modified except by the spreadsheet editing tools; files and folders are only moved or created by the organising tools, and never outside the allowed folders. Paths outside the allowed folders — including via `..` or symbolic links — are rejected, for both reading and writing.",
   "author": {
     "name": "okahilak"
   },
@@ -68,6 +68,10 @@
       "description": "Find text in a Word document with its location."
     },
     {
+      "name": "list_directory",
+      "description": "List a folder's files and subfolders with sizes and dates, optionally recursively."
+    },
+    {
       "name": "create_folder",
       "description": "Create a folder (optionally with missing parents)."
     },
@@ -114,7 +118,7 @@
     "allowed_directories": {
       "type": "directory",
       "title": "Allowed folders",
-      "description": "Folders Claude may read PDF, XLSX and DOCX files from (including subfolders). Edited workbooks are saved, and files and folders are created, moved and renamed, only inside these folders.",
+      "description": "Folders Claude may list and read PDF, XLSX and DOCX files from (including subfolders). Edited workbooks are saved, and files and folders are created, moved and renamed, only inside these folders.",
       "multiple": true,
       "required": true,
       "default": [

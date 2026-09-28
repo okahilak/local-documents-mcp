@@ -104,7 +104,7 @@ test("raw: server/discover before initialize gets a modern discover result and t
     // Modern-era follow-up on the same connection: tools/list with the per-request envelope.
     const list = await s.request({ jsonrpc: "2.0", id: 2, method: "tools/list", params: { _meta: PROBE.params._meta } });
     assert.equal(list.error, undefined, JSON.stringify(list.error));
-    assert.equal(list.result.tools.length, 15);
+    assert.equal(list.result.tools.length, 16);
     const call = await s.request({
       jsonrpc: "2.0",
       id: 3,
@@ -132,7 +132,7 @@ test("raw: envelope-less server/discover is answered with an error (not a close)
     assert.equal(init.result.serverInfo.name, "local-documents");
     s.send({ jsonrpc: "2.0", method: "notifications/initialized" });
     const list = await s.request({ jsonrpc: "2.0", id: 3, method: "tools/list" });
-    assert.equal(list.result.tools.length, 15);
+    assert.equal(list.result.tools.length, 16);
   } finally {
     await s.close();
   }
@@ -182,7 +182,7 @@ test("client: Claude-like in-place probe negotiates the modern protocol", async 
   try {
     assert.equal(client.getNegotiatedProtocolVersion(), "2026-07-28");
     const { tools } = await client.listTools();
-    assert.equal(tools.length, 15);
+    assert.equal(tools.length, 16);
     const r = await client.callTool({ name: "pdf_info", arguments: { path: "report.pdf" } });
     assert.equal(JSON.parse(r.content[0].text).pages, 3);
   } finally {
@@ -198,7 +198,7 @@ test("client: SDK 2.x base transport (sibling probe) and legacy mode both connec
       const v = client.getNegotiatedProtocolVersion();
       if (mode === "auto") assert.equal(v, "2026-07-28");
       else assert.match(v, /^2025-/);
-      assert.equal((await client.listTools()).tools.length, 15);
+      assert.equal((await client.listTools()).tools.length, 16);
     } finally {
       await client.close();
     }
@@ -210,7 +210,7 @@ test("client: SDK 1.x legacy client connects", async () => {
   await client.connect(new StdioV1({ command: process.execPath, args: [entry, allowed], stderr: "ignore" }));
   try {
     assert.match(client.getServerVersion().name, /local-documents/);
-    assert.equal((await client.listTools()).tools.length, 15);
+    assert.equal((await client.listTools()).tools.length, 16);
   } finally {
     await client.close();
   }

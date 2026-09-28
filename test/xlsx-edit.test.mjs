@@ -76,7 +76,7 @@ after(async () => client?.close());
 
 test("xlsx_edit is the only workbook-editing tool and is not read-only", async () => {
   const { tools } = await client.listTools();
-  assert.equal(tools.length, 15);
+  assert.equal(tools.length, 16);
   assert.ok(!tools.some((t) => ["xlsx_write_range", "xlsx_set_formula", "xlsx_add_sheet"].includes(t.name)));
   const writers = ["xlsx_edit", "create_folder", "rename", "move", "move_batch"];
   for (const t of tools) assert.equal(t.annotations.readOnlyHint, !writers.includes(t.name), t.name);
@@ -298,14 +298,54 @@ test("add_sheet updates workbook.xml, its rels and content types only; the new s
   }
 });
 
-test("guards: merged cells, array formulas and table headers are refused", async () => {
-  for (const [cell, re] of [["H1", /inside merged range G1:H1/], ["M2", /part of an array formula \(M1:M2\)/], ["J1", /header cell of table "T1"/]]) {
+test("guards: merged cells and array formulas are refused", async () => {
+  for (const [cell, re] of [["H1", /inside merged range G1:H1/], ["M2", /part of an array formula \(M1:M2\)/]]) {
     const r = await edit({ path: "rich.xlsx", output_path: "never.xlsx", edits: [{ sheet: "Sheet1", cell, value: 1 }] });
     assert.ok(r.isError, cell);
     assert.match(text(r), re);
   }
   const ok = await edit({ path: "rich.xlsx", output_path: "table-body.xlsx", edits: [{ sheet: "Sheet1", cell: "K2", value: 99 }, { sheet: "Sheet1", cell: "G1", value: "anchor ok" }] });
   assert.ok(!ok.isError, text(ok));
+});
+
+test("editing a table header cell renames the table column in both places", async () => {
+  const src = path.join(allowed, "rich.xlsx");
+  const r = await edit({ path: "rich.xlsx", output_path: "renamed-col.xlsx", edits: [{ sheet: "Sheet1", cell: "K1", value: "Value & <Notes>" }] });
+  assert.ok(!r.isError, text(r));
+  assert.match(text(r), /Renamed column "Val" of table "T1" to "Value & <Notes>"/);
+  const out = path.join(allowed, "renamed-col.xlsx");
+  const tablePart = [...parts(out).keys()].find((n) => /^xl\/tables\/table\d+\.xml$/.test(n));
+  await assertUntouched(src, out, ["xl/worksheets/sheet1.xml", "xl/workbook.xml", "xl/sharedStrings.xml", tablePart].filter((n) => parts(src).has(n)));
+  const tx = partText(out, tablePart);
+  assert.match(tx, /<tableColumn [^>]*name="Key"/);
+  assert.match(tx, /<tableColumn [^>]*name="Value &amp; &lt;Notes&gt;"/);
+  const ws = (await load(out)).getWorksheet("Sheet1");
+  assert.equal(ws.getCell("K1").value, "Value & <Notes>");
+  assert.equal(ws.getCell("K2").value, 1, "table data unchanged");
+});
+
+test("table header renames are refused when unsafe", async () => {
+  const cases = [
+    [[{ sheet: "Sheet1", cell: "K1", value: 5 }], /must be text/],
+    [[{ sheet: "Sheet1", cell: "K1", clear: true }], /must be text/],
+    [[{ sheet: "Sheet1", cell: "K1", value: "  " }], /cannot be blank/],
+    [[{ sheet: "Sheet1", cell: "K1", value: "key" }], /two columns named "key"/],
+    [[{ sheet: "Sheet1", cell: "K1", value: "Amount" }, { sheet: "Sheet1", cell: "A20", formula: "SUM(T1[Val])" }], /Column "Val" of table "T1" is used by name in a formula/],
+  ];
+  for (const [edits, re] of cases) {
+    const r = await edit({ path: "rich.xlsx", output_path: "never.xlsx", edits });
+    assert.ok(r.isError, JSON.stringify(edits));
+    assert.match(text(r), re);
+  }
+  // A formula already in the workbook blocks the rename too.
+  const w = await edit({ path: "rich.xlsx", output_path: "with-ref.xlsx", edits: [{ sheet: "Summary", cell: "B1", formula: "SUM(T1[[#Data],[Val]])" }] });
+  assert.ok(!w.isError, text(w));
+  const r = await edit({ path: "with-ref.xlsx", output_path: "never.xlsx", edits: [{ sheet: "Sheet1", cell: "K1", value: "Amount" }] });
+  assert.match(text(r), /is used by name in a formula/);
+  // Swapping two names in one batch is fine.
+  const ok = await edit({ path: "rich.xlsx", output_path: "swapped.xlsx", edits: [{ sheet: "Sheet1", cell: "J1", value: "Val" }, { sheet: "Sheet1", cell: "K1", value: "Key" }] });
+  assert.ok(!ok.isError, text(ok));
+  assert.ok(!fs.existsSync(path.join(allowed, "never.xlsx")));
 });
 
 test("transactional: one invalid edit means nothing is written", async () => {

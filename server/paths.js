@@ -109,6 +109,25 @@ function deniedMessage(input) {
  * @param {string[]} extensions lower-case extensions including the dot
  */
 export function resolveAllowedFile(input, extensions) {
+  const { real, st } = resolveAllowedExisting(input, "File");
+  if (!st.isFile()) throw new PathError(`Not a regular file: ${input}`);
+  const ext = path.extname(real).toLowerCase();
+  if (!extensions.includes(ext)) {
+    throw new PathError(`Unsupported file type "${ext || "(none)"}". Expected: ${extensions.join(", ")}`);
+  }
+  if (st.size > MAX_FILE_BYTES) throw new PathError(`File is too large (${st.size} bytes).`);
+  return { realPath: real, size: st.size, mtimeMs: st.mtimeMs };
+}
+
+/** Resolve a user-supplied path to a real directory inside an allowed directory. */
+export function resolveAllowedDirectory(input) {
+  const { real, st } = resolveAllowedExisting(input, "Folder");
+  if (!st.isDirectory()) throw new PathError(`Not a folder: ${input}`);
+  return real;
+}
+
+/** Shared by the resolvers above: realpath of an existing path, checked against the allowed directories. */
+function resolveAllowedExisting(input, noun) {
   if (allowedRoots.length === 0) {
     throw new PathError(
       "No allowed directories are configured. Add at least one folder in the Local Documents extension settings."
@@ -131,17 +150,10 @@ export function resolveAllowedFile(input, extensions) {
     if (!allowedRoots.some((root) => isInside(root, real))) {
       throw new PathError(deniedMessage(input));
     }
-    const st = fs.statSync(real);
-    if (!st.isFile()) throw new PathError(`Not a regular file: ${input}`);
-    const ext = path.extname(real).toLowerCase();
-    if (!extensions.includes(ext)) {
-      throw new PathError(`Unsupported file type "${ext || "(none)"}". Expected: ${extensions.join(", ")}`);
-    }
-    if (st.size > MAX_FILE_BYTES) throw new PathError(`File is too large (${st.size} bytes).`);
-    return { realPath: real, size: st.size, mtimeMs: st.mtimeMs };
+    return { real, st: fs.statSync(real) };
   }
 
-  if (lastErr && lastErr.code === "ENOENT") throw new PathError(`File not found: ${input}`);
+  if (lastErr && lastErr.code === "ENOENT") throw new PathError(`${noun} not found: ${input}`);
   if (lastErr && (lastErr.code === "EACCES" || lastErr.code === "EPERM")) throw new PathError(`Permission denied: ${input}`);
   throw new PathError(`Cannot access ${input}${lastErr ? ` (${lastErr.code || lastErr.message})` : ""}`);
 }
@@ -230,6 +242,10 @@ function lstatOrNull(p) {
     if (err.code === "ENOENT" || err.code === "ENOTDIR") return null;
     throw new PathError(`Cannot access ${p} (${err.code || err.message})`);
   }
+}
+
+export function allowedRootOf(realPath) {
+  return rootOf(realPath);
 }
 
 function rootOf(realPath) {

@@ -11,7 +11,7 @@ import { McpServer } from "@modelcontextprotocol/server";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import { z } from "zod";
 import { setAllowedDirectories } from "./paths.js";
-import { MAX_BATCH, createFolder, moveEntries, renameEntry } from "./files.js";
+import { MAX_BATCH, MAX_LIST_ENTRIES, createFolder, listDirectory, moveEntries, renameEntry } from "./files.js";
 
 const VERSION = "2.1.0";
 const log = (...args) => console.error("[local-documents]", ...args);
@@ -62,7 +62,8 @@ const instructions =
   "and used ranges, then xlsx_read_range or xlsx_search. For Word documents: docx_info for the outline, then docx_read_text, " +
   "docx_read_tables or docx_search. To change a workbook, batch all changes into one xlsx_edit call; it writes a NEW workbook by " +
   "default and never changes the original unless overwrite=true is passed; only do that when the user explicitly asks to modify the original. " +
-  "To organise files and folders (any type), use create_folder, rename, move, or move_batch for many moves at once; these never overwrite " +
+  "To organise files and folders (any type), look first with list_directory (recursive=true for a whole tree), then use create_folder, " +
+  "rename, move, or move_batch for many moves at once; these never overwrite " +
   "or delete anything, and a failed move_batch is undone completely.";
 
 const readOnly = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
@@ -298,6 +299,28 @@ function createServer() {
       'New path for the item, including its name. End it with "/" to move the item INTO that folder and keep its name. Relative paths are relative to the allowed directory the source is in.'
     );
   const createFoldersArg = z.boolean().optional().describe("Create missing destination folders (default false).");
+
+  server.registerTool(
+    "list_directory",
+    {
+      title: "List folder",
+      description:
+        "List the files and folders in a folder, with sizes and modification times. With no path, lists every allowed directory. " +
+        "Paths in the output are relative to the allowed directory and can be passed to move, rename and move_batch as they are. " +
+        "Hidden files are skipped by default; symbolic links are shown but not followed.",
+      inputSchema: z.object({
+        path: z.string().optional().describe("Folder to list: absolute, or relative to an allowed directory. Omit to list all allowed directories."),
+        recursive: z.boolean().optional().describe("Also list subfolders (default false)."),
+        max_depth: z.coerce.number().int().min(1).max(20).optional().describe("With recursive=true, how many levels to list (default 5)."),
+        include_hidden: z.boolean().optional().describe('Include hidden files such as ".DS_Store" (default false).'),
+        max_entries: z.coerce.number().int().min(1).max(MAX_LIST_ENTRIES).optional().describe("Maximum entries to return (default 1000)."),
+      }),
+      annotations: readOnly,
+    },
+    wrap(async ({ path: p, recursive, max_depth, include_hidden, max_entries }) =>
+      listDirectory(p, { recursive: recursive ?? false, maxDepth: max_depth ?? 5, includeHidden: include_hidden ?? false, maxEntries: max_entries ?? 1000 })
+    )
+  );
 
   server.registerTool(
     "create_folder",

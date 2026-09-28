@@ -42,11 +42,11 @@ after(async () => client?.close());
 const call = (name, args) => client.callTool({ name, arguments: args });
 const text = (r) => r.content.filter((c) => c.type === "text").map((c) => c.text).join("\n");
 
-test("lists the ten read-only tools, xlsx_edit and the file-organising tools", async () => {
+test("lists the eleven read-only tools, xlsx_edit and the file-organising tools", async () => {
   const { tools } = await client.listTools();
   const editing = ["xlsx_edit", "create_folder", "rename", "move", "move_batch"];
   assert.deepEqual(tools.map((t) => t.name).sort(), [
-    "create_folder", "docx_info", "docx_read_tables", "docx_read_text", "docx_search", "move", "move_batch",
+    "create_folder", "docx_info", "docx_read_tables", "docx_read_text", "docx_search", "list_directory", "move", "move_batch",
     "pdf_info", "pdf_read_text", "pdf_render_page", "rename", "xlsx_edit", "xlsx_info", "xlsx_read_range", "xlsx_search",
   ]);
   for (const t of tools) assert.equal(t.annotations.readOnlyHint, !editing.includes(t.name), t.name);

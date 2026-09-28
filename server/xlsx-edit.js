@@ -386,9 +386,96 @@ function sheetTables(pkg, sheet) {
     const ref = X.getAttr(a, "ref");
     if (!ref) continue;
     const hdr = X.getAttr(a, "headerRowCount");
-    out.push({ name: X.decodeEntities(X.getAttr(a, "displayName") || X.getAttr(a, "name") || p), range: parseRangeRef(ref), headerRows: hdr === undefined ? 1 : parseInt(hdr, 10) });
+    out.push({
+      path: p,
+      name: X.decodeEntities(X.getAttr(a, "displayName") || X.getAttr(a, "name") || p),
+      range: parseRangeRef(ref),
+      headerRows: hdr === undefined ? 1 : parseInt(hdr, 10),
+      tableType: X.getAttr(a, "tableType"),
+    });
   }
   return out;
+}
+
+/** ST_Xstring decoding (inverse of X.encodeXstring) for attribute values. */
+const decodeXstring = (s) => s.replace(/_x([0-9A-Fa-f]{4})_/g, (m, h) => String.fromCharCode(parseInt(h, 16)));
+
+function tableColumnEls(xml) {
+  const root = X.rootElement(xml);
+  const tcs = X.scanChildren(xml, root.openEnd, root.closeStart).find((k) => k.local === "tableColumns");
+  if (!tcs || tcs.selfClosing) return [];
+  return X.scanChildren(xml, tcs.openEnd, tcs.closeStart)
+    .filter((k) => k.local === "tableColumn")
+    .map((el) => {
+      const attrs = X.parseAttrs(xml, el);
+      return { el, attrs, name: decodeXstring(X.decodeEntities(X.getAttr(attrs, "name") || "")) };
+    });
+}
+
+/** Escape a column name for use inside a structured reference ([Col]): ' [ ] # are prefixed with '. */
+const escapeStructured = (s) => s.replace(/['[\]#]/g, "'$&");
+const escapeRegExp = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** Every formula text in the workbook that could contain a structured reference. */
+function workbookFormulaTexts(pkg, wb) {
+  const parts = [wb.path];
+  for (const s of wb.sheets) {
+    if (!s.isWorksheet || !s.path || !pkg.has(s.path)) continue;
+    parts.push(s.path);
+    for (const t of sheetTables(pkg, s)) parts.push(t.path);
+  }
+  const re = /<(?:[\w.-]+:)?(f|definedName|calculatedColumnFormula|totalsRowFormula)\b[^>]*?(?<!\/)>([\s\S]*?)<\/(?:[\w.-]+:)?\1>/g;
+  const out = [];
+  for (const p of parts) for (const m of pkg.text(p).matchAll(re)) out.push(X.decodeEntities(m[2]));
+  return out.concat(wb.batchFormulas || []); // formulas written by this same batch
+}
+
+/**
+ * Header cell edits rename the table column: Excel keeps the header text both in the cell
+ * and in the table part's <tableColumn name>, and the two must match.
+ */
+function renameTableColumns(pkg, wb, sheet, table, edits) {
+  if (table.tableType && table.tableType !== "worksheet") throw new Error(`Table "${table.name}" is linked to an external query; renaming its columns is not supported.`);
+  let xml = pkg.text(table.path);
+  const cols = tableColumnEls(xml);
+  if (cols.length !== table.range.c2 - table.range.c1 + 1) throw new Error(`Table "${table.name}" has ${cols.length} column definitions for range of ${table.range.c2 - table.range.c1 + 1} columns; renaming its columns is not supported.`);
+  const names = cols.map((c) => c.name);
+  const renames = [];
+  for (const e of edits) {
+    const where = `${sheet.name}!${e.pos.ref} (header of table "${table.name}")`;
+    if (e.kind !== "string") throw new Error(`${where} must be text; table column names cannot be numbers, dates, booleans, formulas or empty.`);
+    if (!e.value.trim()) throw new Error(`${where} cannot be blank; every table column needs a name.`);
+    if (e.value.length > 255) throw new Error(`${where}: table column names are limited to 255 characters.`);
+    const i = e.pos.col - table.range.c1;
+    if (names[i] === e.value) continue;
+    renames.push({ i, from: names[i], to: e.value });
+    names[i] = e.value;
+  }
+  const seen = new Map();
+  names.forEach((n) => {
+    const k = n.toLowerCase();
+    if (seen.has(k)) throw new Error(`Table "${table.name}" would have two columns named "${n}" (column names must be unique, ignoring case).`);
+    seen.set(k, true);
+  });
+  if (!renames.length) return [];
+
+  // Formulas that refer to a renamed column by name would break; Excel rewrites them on
+  // rename, this tool does not, so refuse instead.
+  const formulas = workbookFormulaTexts(pkg, wb);
+  for (const r of renames) {
+    const ref = new RegExp(`[[@]\\s*${escapeRegExp(escapeStructured(r.from))}\\s*\\]`, "i");
+    const hit = formulas.find((f) => ref.test(f));
+    if (hit) throw new Error(`Column "${r.from}" of table "${table.name}" is used by name in a formula (${hit.length > 80 ? hit.slice(0, 77) + "..." : hit}); renaming it is not supported because those formulas would break. Rename it in Excel instead, which updates the formulas.`);
+  }
+
+  for (const r of [...renames].sort((a, b) => b.i - a.i)) {
+    const c = cols[r.i];
+    const enc = X.encodeXstring(r.to).replace(/[\n\r]/g, (ch) => (ch === "\n" ? "_x000a_" : "_x000d_"));
+    xml = xml.slice(0, c.el.start) + X.startTag(c.el.name, X.setAttr([...c.attrs], "name", X.escapeAttr(enc)), c.el.selfClosing) + xml.slice(c.el.openEnd);
+  }
+  X.assertWellFormed(xml, table.path);
+  pkg.set(table.path, xml);
+  return renames.map((r) => `Renamed column "${r.from}" of table "${table.name}" to "${r.to}" (table definition ${table.path} updated to match the header cell).`);
 }
 
 /**
@@ -446,6 +533,7 @@ function editWorksheet(pkg, wb, sheet, cellEdits, sst) {
     .map((fc) => ({ kind: X.getAttr(fc.attrs, "t") === "array" ? "an array formula" : "a data table", ref: X.getAttr(fc.attrs, "ref"), ...parseRangeRef(X.getAttr(fc.attrs, "ref")) }));
   const formulaAt = new Map(formulaCells.map((fc) => [fc.cell.ref, fc]));
 
+  const headerEdits = new Map(); // table -> edits of its header cells
   for (const e of cellEdits) {
     const { row, col, ref } = e.pos;
     const m = merges.find((g) => inRange(g, row, col) && !(g.r1 === row && g.c1 === col));
@@ -453,8 +541,13 @@ function editWorksheet(pkg, wb, sheet, cellEdits, sst) {
     const b = blockers.find((g) => inRange(g, row, col));
     if (b) throw new Error(`${sheet.name}!${ref} is part of ${b.kind} (${b.ref}); editing it is not supported.`);
     const t = tables.find((tb) => tb.headerRows > 0 && row >= tb.range.r1 && row < tb.range.r1 + tb.headerRows && col >= tb.range.c1 && col <= tb.range.c2);
-    if (t) throw new Error(`${sheet.name}!${ref} is a header cell of table "${t.name}"; renaming table columns is not supported.`);
+    if (t) {
+      if (t.headerRows !== 1) throw new Error(`${sheet.name}!${ref} is a header cell of table "${t.name}", which has ${t.headerRows} header rows; renaming its columns is not supported.`);
+      if (!headerEdits.has(t)) headerEdits.set(t, []);
+      headerEdits.get(t).push(e);
+    }
   }
+  for (const [t, edits] of headerEdits) notes.push(...renameTableColumns(pkg, wb, sheet, t, edits));
 
   // --- Shared formulas whose master is being replaced: promote the first remaining
   // dependent to master (with translated formula and a fresh ref).
@@ -811,6 +904,7 @@ export function applyEdits(srcBuf, edits) {
   const notes = [];
 
   const addedSheets = adds.map((name) => addSheet(pkg, wb, name).name);
+  wb.batchFormulas = cells.filter((c) => c.kind === "formula").map((c) => c.value);
 
   // Group cell edits per sheet; later edits to the same cell win.
   const perSheet = new Map();
