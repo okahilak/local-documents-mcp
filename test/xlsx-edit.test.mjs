@@ -74,11 +74,12 @@ before(async () => {
 });
 after(async () => client?.close());
 
-test("xlsx_edit is the only editing tool and is not read-only", async () => {
+test("xlsx_edit is the only workbook-editing tool and is not read-only", async () => {
   const { tools } = await client.listTools();
-  assert.equal(tools.length, 11);
+  assert.equal(tools.length, 15);
   assert.ok(!tools.some((t) => ["xlsx_write_range", "xlsx_set_formula", "xlsx_add_sheet"].includes(t.name)));
-  for (const t of tools) assert.equal(t.annotations.readOnlyHint, t.name !== "xlsx_edit", t.name);
+  const writers = ["xlsx_edit", "create_folder", "rename", "move", "move_batch"];
+  for (const t of tools) assert.equal(t.annotations.readOnlyHint, !writers.includes(t.name), t.name);
 });
 
 test("a small edit leaves every unrelated part byte-identical (xlsm with add-ins, customXml, chart, pivot, VBA)", async () => {

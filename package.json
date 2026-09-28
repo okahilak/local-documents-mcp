@@ -1,10 +1,10 @@
 {
   "name": "local-documents",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "PDF, XLSX and DOCX tools with safe XLSX editing for Claude Desktop (MCPB)",
   "main": "server/index.js",
   "scripts": {
-    "test": "node test/make-fixtures.mjs && node --test test/e2e.test.mjs test/negotiation.test.mjs test/pdfjs-paths.test.mjs test/xlsx-edit.test.mjs",
+    "test": "node test/make-fixtures.mjs && node --test test/e2e.test.mjs test/negotiation.test.mjs test/pdfjs-paths.test.mjs test/xlsx-edit.test.mjs test/files.test.mjs",
     "build": "sh scripts/build.sh",
     "test:bundle": "sh scripts/test-bundle.sh"
   },

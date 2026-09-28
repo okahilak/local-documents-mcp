@@ -74,6 +74,34 @@ export function getAllowedDirectories() {
 
 export class PathError extends Error {}
 
+/** Common checks for a user-supplied path; returns it with "~" expanded. */
+function checkInput(input, label) {
+  if (typeof input !== "string" || input.trim() === "") throw new PathError(`${label} must be a non-empty string.`);
+  if (input.includes("\0")) throw new PathError(`${label} contains a NUL byte.`);
+  const p = expandHome(input.trim());
+  if (process.platform === "win32") {
+    // Block NTFS alternate data streams ("file.pdf:stream") and device paths.
+    const withoutDrive = p.replace(/^[a-zA-Z]:/, "");
+    if (withoutDrive.includes(":")) throw new PathError(`${label} may not contain ':' outside the drive letter.`);
+    if (p.startsWith("\\\\?\\") || p.startsWith("\\\\.\\")) throw new PathError("Device/namespace paths are not allowed.");
+  }
+  return p;
+}
+
+const WINDOWS_RESERVED = /^(con|prn|aux|nul|com[0-9¹²³]|lpt[0-9¹²³])(\..*)?$/i;
+
+// Names that are invalid or dangerous on Windows are rejected everywhere, so a
+// file written on one OS can always be opened on the other.
+export function assertPortableName(base, label) {
+  if (!base || base === "." || base === ".." || WINDOWS_RESERVED.test(base) || /[<>:"|?*\x00-\x1f\\/]/.test(base) || /[. ]$/.test(base)) {
+    throw new PathError(`Invalid ${label}: ${base}`);
+  }
+}
+
+function deniedMessage(input) {
+  return `Access denied: ${input} resolves outside the allowed directories.\nAllowed directories:\n${allowedRoots.map((r) => "  " + r).join("\n")}`;
+}
+
 /**
  * Resolve a user-supplied path to a real, readable regular file inside an allowed
  * directory. Returns { realPath, size, mtimeMs }.
@@ -86,16 +114,7 @@ export function resolveAllowedFile(input, extensions) {
       "No allowed directories are configured. Add at least one folder in the Local Documents extension settings."
     );
   }
-  if (typeof input !== "string" || input.trim() === "") throw new PathError("Path must be a non-empty string.");
-  if (input.includes("\0")) throw new PathError("Path contains a NUL byte.");
-
-  let p = expandHome(input.trim());
-  if (process.platform === "win32") {
-    // Block NTFS alternate data streams ("file.pdf:stream") and device paths.
-    const withoutDrive = p.replace(/^[a-zA-Z]:/, "");
-    if (withoutDrive.includes(":")) throw new PathError("Path may not contain ':' outside the drive letter.");
-    if (p.startsWith("\\\\?\\") || p.startsWith("\\\\.\\")) throw new PathError("Device/namespace paths are not allowed.");
-  }
+  const p = checkInput(input, "Path");
 
   // Candidate absolute paths: absolute input as-is, or relative input under each allowed root.
   const candidates = path.isAbsolute(p) ? [path.resolve(p)] : allowedRoots.map((r) => path.resolve(r, p));
@@ -110,9 +129,7 @@ export function resolveAllowedFile(input, extensions) {
       continue;
     }
     if (!allowedRoots.some((root) => isInside(root, real))) {
-      throw new PathError(
-        `Access denied: ${input} resolves outside the allowed directories.\nAllowed directories:\n${allowedRoots.map((r) => "  " + r).join("\n")}`
-      );
+      throw new PathError(deniedMessage(input));
     }
     const st = fs.statSync(real);
     if (!st.isFile()) throw new PathError(`Not a regular file: ${input}`);
@@ -131,8 +148,6 @@ export function resolveAllowedFile(input, extensions) {
 
 // ---------- output paths (for tools that write files) ----------
 
-const WINDOWS_RESERVED = /^(con|prn|aux|nul|com[0-9¹²³]|lpt[0-9¹²³])(\..*)?$/i;
-
 export function samePath(a, b) {
   return norm(a) === norm(b);
 }
@@ -149,24 +164,12 @@ export function samePath(a, b) {
  */
 export function resolveAllowedOutput(input, { extensions, baseDir, overwrite = false }) {
   if (allowedRoots.length === 0) throw new PathError("No allowed directories are configured.");
-  if (typeof input !== "string" || input.trim() === "") throw new PathError("Output path must be a non-empty string.");
-  if (input.includes("\0")) throw new PathError("Output path contains a NUL byte.");
-
-  let p = expandHome(input.trim());
-  if (process.platform === "win32") {
-    const withoutDrive = p.replace(/^[a-zA-Z]:/, "");
-    if (withoutDrive.includes(":")) throw new PathError("Output path may not contain ':' outside the drive letter.");
-    if (p.startsWith("\\\\?\\") || p.startsWith("\\\\.\\")) throw new PathError("Device/namespace paths are not allowed.");
-  }
+  const p = checkInput(input, "Output path");
   const abs = path.isAbsolute(p) ? path.resolve(p) : path.resolve(baseDir, p);
   const base = path.basename(abs);
   const ext = path.extname(base).toLowerCase();
   if (!extensions.includes(ext)) throw new PathError(`Output file must have one of these extensions: ${extensions.join(", ")}`);
-  // Names that are invalid or dangerous on Windows are rejected everywhere, so a
-  // workbook written on one OS can always be opened on the other.
-  if (WINDOWS_RESERVED.test(base) || /[<>:"|?*\x00-\x1f]/.test(base) || /[. ]$/.test(base)) {
-    throw new PathError(`Invalid output file name: ${base}`);
-  }
+  assertPortableName(base, "output file name");
 
   let realParent;
   try {
@@ -210,4 +213,114 @@ export function assertOutputStillAllowed(target) {
   } catch (err) {
     if (err instanceof PathError) throw err;
   }
+}
+
+// ---------- files and folders (for the file-organising tools) ----------
+
+function requireRoots() {
+  if (allowedRoots.length === 0) {
+    throw new PathError("No allowed directories are configured. Add at least one folder in the Local Documents extension settings.");
+  }
+}
+
+function lstatOrNull(p) {
+  try {
+    return fs.lstatSync(p);
+  } catch (err) {
+    if (err.code === "ENOENT" || err.code === "ENOTDIR") return null;
+    throw new PathError(`Cannot access ${p} (${err.code || err.message})`);
+  }
+}
+
+function rootOf(realPath) {
+  return allowedRoots.find((root) => isInside(root, realPath)) ?? null;
+}
+
+/**
+ * Resolve an EXISTING file or folder to move or rename. The parent directory is
+ * resolved with realpath and must be inside an allowed directory; the entry itself
+ * is not followed, so a symbolic link is handled as the link, never its target.
+ * An allowed directory itself is never accepted.
+ * Returns { path, stat (lstat), root }.
+ */
+export function resolveAllowedEntry(input) {
+  requireRoots();
+  const p = checkInput(input, "Path");
+  const candidates = path.isAbsolute(p) ? [path.resolve(p)] : allowedRoots.map((r) => path.resolve(r, p));
+
+  let lastErr = null;
+  for (const candidate of candidates) {
+    const base = path.basename(candidate);
+    if (!base) throw new PathError(`Not a file or folder: ${input}`);
+    let target, stat;
+    try {
+      target = path.join(realpath(path.dirname(candidate)), base);
+      stat = fs.lstatSync(target);
+    } catch (err) {
+      lastErr = err;
+      continue;
+    }
+    if (allowedRoots.some((r) => samePath(r, target))) throw new PathError(`An allowed directory itself cannot be moved or renamed: ${target}`);
+    const root = rootOf(path.dirname(target));
+    if (!root) throw new PathError(deniedMessage(input));
+    return { path: target, stat, root };
+  }
+
+  if (lastErr && (lastErr.code === "ENOENT" || lastErr.code === "ENOTDIR")) throw new PathError(`File or folder not found: ${input}`);
+  if (lastErr && (lastErr.code === "EACCES" || lastErr.code === "EPERM")) throw new PathError(`Permission denied: ${input}`);
+  throw new PathError(`Cannot access ${input}${lastErr ? ` (${lastErr.code || lastErr.message})` : ""}`);
+}
+
+/**
+ * Resolve a NEW path (a destination or a folder to create). Relative input resolves
+ * against `baseDir`. The nearest existing ancestor is resolved with realpath and must be
+ * a directory inside an allowed directory; every name below it must be portable.
+ * Nothing is created here: `missing` lists the absolute folders, outermost first, that
+ * would have to be created for the parent to exist.
+ * Returns { path, missing, stat } where `stat` is the lstat of an existing entry or null.
+ */
+export function resolveAllowedNewPath(input, { baseDir, label = "destination" }) {
+  requireRoots();
+  const p = checkInput(input, label[0].toUpperCase() + label.slice(1));
+  const abs = path.isAbsolute(p) ? path.resolve(p) : path.resolve(baseDir, p);
+
+  const names = [];
+  let ancestor = abs;
+  let realAncestor = null;
+  while (realAncestor === null) {
+    try {
+      realAncestor = realpath(ancestor);
+    } catch (err) {
+      if (err.code !== "ENOENT") throw new PathError(`Cannot access ${ancestor} (${err.code || err.message})`);
+      const up = path.dirname(ancestor);
+      if (up === ancestor) throw new PathError(`Cannot resolve ${label}: ${input}`);
+      names.unshift(path.basename(ancestor));
+      ancestor = up;
+    }
+  }
+
+  if (names.length === 0) {
+    // The path exists: resolve its parent, but not the entry itself (it may be a link).
+    const base = path.basename(abs);
+    if (!base) throw new PathError(`Invalid ${label}: ${input}`);
+    const parent = realpath(path.dirname(abs));
+    const target = path.join(parent, base);
+    if (!rootOf(parent)) throw new PathError(deniedMessage(input));
+    return { path: target, missing: [], stat: fs.lstatSync(target) };
+  }
+
+  if (!rootOf(realAncestor)) throw new PathError(deniedMessage(input));
+  if (!fs.statSync(realAncestor).isDirectory()) throw new PathError(`Not a folder: ${realAncestor}`);
+  for (const n of names) assertPortableName(n, "name");
+  const missing = [];
+  let dir = realAncestor;
+  for (const n of names.slice(0, -1)) missing.push((dir = path.join(dir, n)));
+  const target = path.join(dir, names.at(-1));
+  return { path: target, missing, stat: lstatOrNull(target) };
+}
+
+/** Re-check just before a write that `dir` still resolves to itself inside an allowed directory. */
+export function assertFolderStillAllowed(dir) {
+  const real = realpath(dir);
+  if (!samePath(real, dir) || !rootOf(real)) throw new PathError(`Folder location changed and is no longer allowed: ${dir}`);
 }

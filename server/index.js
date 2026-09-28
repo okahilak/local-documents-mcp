@@ -11,8 +11,9 @@ import { McpServer } from "@modelcontextprotocol/server";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import { z } from "zod";
 import { setAllowedDirectories } from "./paths.js";
+import { MAX_BATCH, createFolder, moveEntries, renameEntry } from "./files.js";
 
-const VERSION = "2.0.0";
+const VERSION = "2.1.0";
 const log = (...args) => console.error("[local-documents]", ...args);
 
 process.on("uncaughtException", (err) => log("Uncaught exception:", err));
@@ -60,9 +61,12 @@ const instructions =
   "if a page has no text layer (scanned), use pdf_render_page to view it. For spreadsheets: call xlsx_info to see sheets " +
   "and used ranges, then xlsx_read_range or xlsx_search. For Word documents: docx_info for the outline, then docx_read_text, " +
   "docx_read_tables or docx_search. To change a workbook, batch all changes into one xlsx_edit call; it writes a NEW workbook by " +
-  "default and never changes the original unless overwrite=true is passed; only do that when the user explicitly asks to modify the original.";
+  "default and never changes the original unless overwrite=true is passed; only do that when the user explicitly asks to modify the original. " +
+  "To organise files and folders (any type), use create_folder, rename, move, or move_batch for many moves at once; these never overwrite " +
+  "or delete anything, and a failed move_batch is undone completely.";
 
 const readOnly = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
+const organiseAnnotations = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false };
 const editAnnotations = { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false };
 const outputArgs = {
   output_path: z
@@ -285,6 +289,76 @@ function createServer() {
     wrap(async ({ path: p, query, match_case, max_results }) =>
       (await loadDocx()).docxSearch(p, query, { matchCase: match_case ?? false, maxResults: max_results ?? 50 })
     )
+  );
+
+  const entryArg = z.string().describe("Absolute path to the file or folder, or a path relative to an allowed directory.");
+  const destArg = z
+    .string()
+    .describe(
+      'New path for the item, including its name. End it with "/" to move the item INTO that folder and keep its name. Relative paths are relative to the allowed directory the source is in.'
+    );
+  const createFoldersArg = z.boolean().optional().describe("Create missing destination folders (default false).");
+
+  server.registerTool(
+    "create_folder",
+    {
+      title: "Create folder",
+      description: "Create a folder inside an allowed directory. Succeeds without change if the folder already exists.",
+      inputSchema: z.object({
+        path: z.string().describe("Absolute path of the new folder, or a path relative to the first allowed directory."),
+        parents: z.boolean().optional().describe("Also create missing parent folders (default false)."),
+      }),
+      annotations: { ...organiseAnnotations, idempotentHint: true },
+    },
+    wrap(async ({ path: p, parents }) => createFolder(p, { parents: parents ?? false }))
+  );
+
+  server.registerTool(
+    "rename",
+    {
+      title: "Rename",
+      description: "Rename a file or folder in place (same folder). Fails if an item with the new name already exists; nothing is overwritten.",
+      inputSchema: z.object({
+        path: entryArg,
+        new_name: z.string().min(1).describe('The new name only, e.g. "2024 Budget.xlsx" (no folders).'),
+      }),
+      annotations: organiseAnnotations,
+    },
+    wrap(async ({ path: p, new_name }) => renameEntry(p, new_name))
+  );
+
+  server.registerTool(
+    "move",
+    {
+      title: "Move",
+      description:
+        "Move (and optionally rename) one file or folder of any type within the allowed directories. Fails if the destination exists; nothing is overwritten. " +
+        "For several items, use move_batch instead.",
+      inputSchema: z.object({ from: entryArg, to: destArg, create_folders: createFoldersArg }),
+      annotations: organiseAnnotations,
+    },
+    wrap(async ({ from, to, create_folders }) => moveEntries([{ from, to }], { createFolders: create_folders ?? false }))
+  );
+
+  server.registerTool(
+    "move_batch",
+    {
+      title: "Move many",
+      description:
+        "Move and/or rename many files and folders in ONE all-or-nothing call, e.g. to reorganise a folder. Moves run in order, and each sees the " +
+        "result of the ones before it. If any move fails, every earlier move is undone and the folders created for them are removed. " +
+        "Nothing is ever overwritten or deleted.",
+      inputSchema: z.object({
+        moves: z
+          .array(z.strictObject({ from: entryArg, to: destArg }))
+          .min(1)
+          .max(MAX_BATCH)
+          .describe('Example: [{"from":"Inbox/invoice-march.pdf","to":"Finance/2024/Invoices/"},{"from":"Inbox/notes.docx","to":"Projects/Alpha/Meeting notes.docx"}]'),
+        create_folders: createFoldersArg,
+      }),
+      annotations: organiseAnnotations,
+    },
+    wrap(async ({ moves, create_folders }) => moveEntries(moves, { createFolders: create_folders ?? false }))
   );
 
   return server;
