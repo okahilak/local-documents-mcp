@@ -26,9 +26,18 @@ Ask Claude to:
 
 ## Installation
 
-1. Build `LocalDocuments.mcpb` using the development instructions below.
-2. Open the `.mcpb` file in Claude Desktop.
-3. Choose the folders Claude is allowed to access (defaults to `~/Documents`).
+Local Documents works with Claude Desktop on macOS (Apple Silicon) and Windows (x64).
+
+1. Download `LocalDocuments.mcpb` from the [latest release](https://github.com/okahilak/local-documents-mcp/releases/latest).
+2. In Claude Desktop, open **Settings → Desktop app → Extensions**.
+3. Drag the downloaded `.mcpb` file into the Extensions window.
+4. Review the extension details and confirm the installation.
+5. Under **Allowed folders**, choose which folders Claude may access. The default is your `Documents` folder; use **Add directory** to add more.
+6. Click **Save** to finish setup.
+
+Local Documents is now ready to use. Start a new conversation and ask Claude to work with files in your selected folders. See [Example requests](#example-requests) for ideas.
+
+**Folder access:** Local Documents can only access files inside the folders you select, including their subfolders. You can change these folders later in the extension's settings.
 
 ## Safety and file handling
 
@@ -66,15 +75,17 @@ Ask Claude to:
 
 All edits in one call are applied together: if any edit is invalid, nothing is written.
 
-## Development
+## Build from source
 
-Requires Node.js 22.13 or later. The build downloads platform-specific binaries, so it needs network access, and produces a single bundle that works on both macOS and Windows.
+If you prefer to build the extension yourself, you need Node.js 22.13 or later. The build downloads platform-specific binaries, so it needs network access, and produces a single bundle that works on both macOS and Windows.
 
 ```bash
 npm install
 npm test
 npm run build
 ```
+
+The build produces `LocalDocuments.mcpb`, which you can install using the same steps as above, starting from step 2.
 
 ## License
 
