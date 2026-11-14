@@ -28,7 +28,7 @@ Ask Claude to:
 
 Local Documents works with Claude Desktop on macOS (Apple Silicon) and Windows (x64).
 
-1. Download `LocalDocuments.mcpb` from the [latest release](https://github.com/okahilak/local-documents-mcp/releases/latest).
+1. Download [`LocalDocuments.mcpb`](https://github.com/okahilak/local-documents-mcp/releases/latest/download/LocalDocuments.mcpb) from [GitHub Releases](https://github.com/okahilak/local-documents-mcp/releases/latest).
 2. In Claude Desktop, open **Settings → Desktop app → Extensions**.
 3. Drag the downloaded `.mcpb` file into the Extensions window.
 4. Review the extension details and confirm the installation.
