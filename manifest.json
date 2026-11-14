@@ -118,7 +118,7 @@
     "allowed_directories": {
       "type": "directory",
       "title": "Allowed folders",
-      "description": "Folders Claude may list and read PDF, XLSX and DOCX files from (including subfolders). Edited workbooks are saved, and files and folders are created, moved and renamed, only inside these folders.",
+      "description": "Folders Claude may access, including subfolders. Claude can read supported documents, edit Excel workbooks, and organise files within these folders only.",
       "multiple": true,
       "required": true,
       "default": [
