@@ -48,6 +48,10 @@ Local Documents is now ready to use. Start a new conversation and ask Claude to 
 - File organisation operations never overwrite or delete existing files.
 - Batch moves are transactional: if an operation fails, earlier changes are rolled back.
 
+## Privacy
+
+Local Documents processes files locally on your computer. It does not collect, store or send any data, and it makes no network connections. Document contents are passed only to Claude, as part of your conversation, when you ask Claude to read a file. How Claude handles conversation data is covered by [Anthropic's privacy policy](https://www.anthropic.com/legal/privacy).
+
 ## Supported files and limitations
 
 - **PDF** (`.pdf`): text is read from the existing text layer; there is no OCR. Scanned pages can be viewed with `pdf_render_page`.
@@ -75,6 +79,18 @@ Local Documents is now ready to use. Start a new conversation and ask Claude to 
 
 All edits in one call are applied together: if any edit is invalid, nothing is written.
 
+## Troubleshooting
+
+- **Claude doesn't seem to use the extension.** Check that Local Documents is installed and enabled under **Settings → Desktop app → Extensions**, then start a new conversation.
+- **"Access denied: … resolves outside the allowed directories."** The file or folder isn't inside one of your allowed folders. Add its folder under **Allowed folders** in the extension's settings. Shortcuts and symbolic links that point outside the allowed folders are also blocked.
+- **"Permission denied" on macOS.** macOS may be blocking Claude from folders such as Documents, Desktop or Downloads. Allow access in **System Settings → Privacy & Security → Files and Folders** (or **Full Disk Access**) for Claude.
+- **A PDF returns little or no text.** The PDF is probably scanned and has no text layer. Ask Claude to view the pages as images instead.
+- **"Unsupported file type".** Only `.pdf`, `.docx`, `.xlsx` and `.xlsm` can be read. Save older `.doc` and `.xls` files in the newer format first.
+- **"File is too large".** Files over 512 MB are not opened.
+- **An Excel edit was refused.** Edits are checked before anything is written. If one edit in a request is invalid (for example, a cell inside an array formula or data table), nothing is saved and the error explains why.
+
+Still stuck? [Open an issue](https://github.com/okahilak/local-documents-mcp/issues) with the error message and your operating system.
+
 ## Build from source
 
 If you prefer to build the extension yourself, you need Node.js 22.13 or later. The build downloads platform-specific binaries, so it needs network access, and produces a single bundle that works on both macOS and Windows.
@@ -86,6 +102,10 @@ npm run build
 ```
 
 The build produces `LocalDocuments.mcpb`, which you can install using the same steps as above, starting from step 2.
+
+## Security
+
+To report a vulnerability, see [SECURITY.md](SECURITY.md).
 
 ## License
 
