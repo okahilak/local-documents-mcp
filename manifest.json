@@ -17,6 +17,9 @@
   "homepage": "https://github.com/okahilak/local-documents-mcp",
   "documentation": "https://github.com/okahilak/local-documents-mcp#readme",
   "support": "https://github.com/okahilak/local-documents-mcp/issues",
+  "privacy_policies": [
+    "https://github.com/okahilak/local-documents-mcp#privacy"
+  ],
   "icon": "icon.png",
   "server": {
     "type": "node",
