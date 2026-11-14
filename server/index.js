@@ -13,7 +13,7 @@ import { z } from "zod";
 import { setAllowedDirectories } from "./paths.js";
 import { MAX_BATCH, MAX_LIST_ENTRIES, createFolder, listDirectory, moveEntries, renameEntry } from "./files.js";
 
-const VERSION = "2.1.0";
+const VERSION = "1.0.0";
 const log = (...args) => console.error("[local-documents]", ...args);
 
 process.on("uncaughtException", (err) => log("Uncaught exception:", err));

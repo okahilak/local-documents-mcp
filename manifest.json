@@ -3,7 +3,7 @@
   "manifest_version": "0.3",
   "name": "local-documents",
   "display_name": "Local Documents",
-  "version": "2.1.0",
+  "version": "1.0.0",
   "description": "Read PDF, Word and Excel files, edit Excel workbooks, and organise files and folders — only inside folders you choose.",
   "long_description": "Local Documents works only with files inside the folders you choose during setup. It cannot read or change anything outside them.\n\n- **PDF**: Extract text, inspect document details, and render pages as images, including scanned pages.\n- **Word (.docx)**: Read text and tables, inspect document structure, and search for content.\n- **Excel (.xlsx, .xlsm)**: Read and search spreadsheets, inspect formulas, and edit cell values, formulas and worksheets.\n- **File organisation**: Browse folders, create folders, and move or rename files and folders, individually or in batches.\n\n**Designed to protect your files**\n\n- Excel edits are saved to a new workbook by default. The original is overwritten only when you explicitly ask for it.\n- Unrelated workbook content, including charts, pivot tables and macros, is preserved.\n- Moving and renaming never overwrites or deletes existing files. If a batch move fails partway, completed moves are rolled back.\n- Access is restricted to your selected folders, with protection against symbolic links and path traversal.\n\nSupports macOS (Apple Silicon) and Windows (x64). No Python, Microsoft Office or other external applications required.",
   "author": {

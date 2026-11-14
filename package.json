@@ -1,6 +1,6 @@
 {
   "name": "local-documents",
-  "version": "2.1.0",
+  "version": "1.0.0",
   "description": "PDF, XLSX and DOCX tools with safe XLSX editing for Claude Desktop (MCPB)",
   "main": "server/index.js",
   "scripts": {
