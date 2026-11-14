@@ -1,33 +1,76 @@
 # Local Documents
 
-Claude Desktop extension for reading PDF, Word and Excel files, editing Excel workbooks, and organising files and folders.
+**Work with local PDF, Word, and Excel files directly from Claude Desktop.**
 
-Works on macOS (Apple Silicon) and Windows (x64). Nothing else to install.
+Local Documents is a Claude Desktop extension that lets Claude read documents, search Word and Excel files, edit Excel workbooks, and organise files and folders on your computer.
 
-## Install
+Supports **macOS (Apple Silicon)** and **Windows (x64)**. No Python or separate document-processing software required.
 
-Build `LocalDocuments.mcpb` (see below), open it in Claude Desktop, and choose the folders Claude may access.
+## What you can do
 
-## Tools
+- **Read PDFs:** Extract text, inspect document details, and render individual pages as images (useful for scanned pages, charts and diagrams).
+- **Work with Word documents:** Read text and tables, and search document contents.
+- **Read and edit Excel workbooks:** Inspect sheets, read cell ranges, search values, update cells and formulas, and add sheets.
+- **Organise files:** List directories, create folders, and move or rename files and folders individually or in batches.
 
-- `pdf_info`, `pdf_read_text`, `pdf_render_page`
-- `docx_info`, `docx_read_text`, `docx_read_tables`, `docx_search`
-- `xlsx_info`, `xlsx_read_range`, `xlsx_search`
-- `xlsx_edit`: set values and formulas, clear cells, add sheets, rename table column headers
+### Example requests
 
-Edits are saved to a new file unless you ask to overwrite the original. Everything else in the workbook, including charts, pivot tables and macros, is left as is.
+Ask Claude to:
 
-- `list_directory`: see what's in a folder, optionally with all its subfolders
-- `create_folder`, `rename`, `move`: organise files and folders of any type
-- `move_batch`: many moves and renames in one call, e.g. to reorganise a folder
+- "Which of the Word documents in this folder mention the Riverside project?"
+- "Find every row in this workbook that mentions Helsinki."
+- "Read the tables from these Word documents."
+- "Update the prices in this Excel workbook and save a new copy."
+- "Create folders for each year and move these documents into the appropriate folders."
+- "Show me page 5 of this PDF."
 
-Organising never overwrites or deletes anything. If one move in a `move_batch` fails, the earlier ones are undone and nothing changes.
+## Installation
 
-Files outside the chosen folders can't be accessed.
+1. Build `LocalDocuments.mcpb` using the development instructions below.
+2. Open the `.mcpb` file in Claude Desktop.
+3. Choose the folders Claude is allowed to access (defaults to `~/Documents`).
+
+## Safety and file handling
+
+**You control which folders Claude can access.** Files outside the selected folders are inaccessible to the extension.
+
+- Excel edits are saved to a new file next to the original, named `<name> (edited).xlsx`, unless you ask for a different name. Existing files are overwritten only when explicitly requested.
+- Other workbook content, including charts, pivot tables, and macros, is preserved.
+- File organisation operations never overwrite or delete existing files.
+- Batch moves are transactional: if an operation fails, earlier changes are rolled back.
+
+## Supported files and limitations
+
+- **PDF** (`.pdf`): text is read from the existing text layer; there is no OCR. Scanned pages can be viewed with `pdf_render_page`.
+- **Word** (`.docx`): the older `.doc` format is not supported.
+- **Excel** (`.xlsx`, `.xlsm`): the older `.xls` format is not supported. Formulas are stored, not calculated; Excel recalculates them when the file is opened.
+- Searching works within one Word or Excel file at a time; there is no search across files or within PDFs.
+
+## Available tools
+
+| Category | Tools |
+|---|---|
+| PDF | `pdf_info`, `pdf_read_text`, `pdf_render_page` |
+| Word | `docx_info`, `docx_read_text`, `docx_read_tables`, `docx_search` |
+| Excel | `xlsx_info`, `xlsx_read_range`, `xlsx_search`, `xlsx_edit` |
+| Files and folders | `list_directory`, `create_folder`, `rename`, `move`, `move_batch` |
+
+### Excel editing
+
+`xlsx_edit` supports:
+
+- Setting cell values and formulas
+- Clearing cells
+- Adding worksheets
+- Renaming Excel table columns (setting a table's header cell also updates the table's column name)
+
+All edits in one call are applied together: if any edit is invalid, nothing is written.
 
 ## Development
 
-```sh
+Requires Node.js 22.13 or later. The build downloads platform-specific binaries, so it needs network access, and produces a single bundle that works on both macOS and Windows.
+
+```bash
 npm install
 npm test
 npm run build
